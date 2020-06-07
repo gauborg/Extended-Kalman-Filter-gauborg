@@ -3,6 +3,8 @@
 
 #include "Eigen/Dense"
 
+#include "tools.h"
+
 class KalmanFilter {
  public:
   /**
@@ -63,6 +65,10 @@ class KalmanFilter {
 
   // measurement covariance matrix
   Eigen::MatrixXd R_;
+
+  // define identity matrix here
+  Eigen::MatrixXd I;
+
 };
 
 #endif // KALMAN_FILTER_H_
