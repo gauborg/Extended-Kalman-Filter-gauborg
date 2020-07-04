@@ -2,17 +2,20 @@
 #define KALMAN_FILTER_H_
 
 #include "Eigen/Dense"
+#include "tools.h"
 
 class KalmanFilter {
- public:
+  Tools tools;
+
+  public:
   /**
-   * Constructor
-   */
+  * Constructor
+  */
   KalmanFilter();
 
   /**
-   * Destructor
-   */
+  * Destructor
+  */ 
   virtual ~KalmanFilter();
 
   /**
@@ -24,8 +27,15 @@ class KalmanFilter {
    * @param R_in Measurement covariance matrix
    * @param Q_in Process covariance matrix
    */
-  void Init(Eigen::VectorXd &x_in, Eigen::MatrixXd &P_in, Eigen::MatrixXd &F_in,
-            Eigen::MatrixXd &H_in, Eigen::MatrixXd &R_in, Eigen::MatrixXd &Q_in);
+
+  void Init( Eigen::VectorXd &x_in, 
+      Eigen::MatrixXd &P_in, 
+      Eigen::MatrixXd &F_in,
+      Eigen::MatrixXd &H_in, 
+      Eigen::MatrixXd &Hj_in, 
+      Eigen::MatrixXd &R_in, 
+      Eigen::MatrixXd &R_ekf_in, 
+      Eigen::MatrixXd &Q_in);
 
   /**
    * Prediction Predicts the state and the state covariance
@@ -64,9 +74,18 @@ class KalmanFilter {
   // measurement covariance matrix
   Eigen::MatrixXd R_;
 
-  // define identity matrix here
-  Eigen::MatrixXd I;
+  // I added these matrices to our Kalman Filter
+  // class since we will be using these frequently
+
+  // measurement covariance matrix for Extended Kalman Filter equations
+  Eigen::MatrixXd R_ekf_;
+
+  // Jacobian matrix for Extended Kalman Filter equations
+  Eigen::MatrixXd Hj_;
+
+  // 4x4 identity matrix
+  Eigen::MatrixXd I_;
 
 };
 
-#endif // KALMAN_FILTER_H_
+#endif /* KALMAN_FILTER_H_ */

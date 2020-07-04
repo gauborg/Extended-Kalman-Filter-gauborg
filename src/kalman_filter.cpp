@@ -1,125 +1,97 @@
 #include "kalman_filter.h"
-#include <iostream>
-#include "math.h"
-#include "tools.h"
+#define PI 3.14159265
 
+#include <iostream>
+using namespace std;
 
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
-
-/* 
- * Please note that the Eigen library does not initialize 
- *   VectorXd or MatrixXd objects with zeros upon creation.
- */
 
 KalmanFilter::KalmanFilter() {}
 
 KalmanFilter::~KalmanFilter() {}
 
 void KalmanFilter::Init(VectorXd &x_in, MatrixXd &P_in, MatrixXd &F_in,
-                        MatrixXd &H_in, MatrixXd &R_in, MatrixXd &Q_in) {
+                        MatrixXd &H_in, MatrixXd &Hj_in, MatrixXd &R_in,
+                        MatrixXd &R_ekf_in, MatrixXd &Q_in)
+{
+  cout << "In KalmanFilter::Init" << endl;
   x_ = x_in;
   P_ = P_in;
   F_ = F_in;
   H_ = H_in;
+  
+  Hj_ = Hj_in;
   R_ = R_in;
+  
+  R_ekf_ = R_ekf_in;
   Q_ = Q_in;
-
-  // define identity matrix
-  I = Eigen::MatrixXd::Identity(4,4);
-
+  
+  I_ = Eigen::MatrixXd::Identity(4,4);
 }
 
-void KalmanFilter::Predict() {
-  /**
-   * TODO: predict the state
-   */
-  
+void KalmanFilter::Predict() 
+{
+  // predict the state
   x_ = F_*x_;
   MatrixXd Ft = F_.transpose();
   P_ = F_*P_*Ft + Q_;
-  std::cout<<"x_ = "<<x_<<std::endl;
-  std::cout<<"P_ = "<<P_<<std::endl;
-
-  std::cout<<"predict executes..."<<std::endl;
-
 }
 
-void KalmanFilter::Update(const VectorXd &z) {
-  /**
-   * TODO: update the state by using Kalman Filter equations
-   */
-  
+// Kalman filter used for Lidar measurements
+void KalmanFilter::Update(const VectorXd &z) 
+{
   // Update the state using Kalman Filter equations
-
-  VectorXd y = z - H_*x_;
+  VectorXd y = z - H_* x_;
   MatrixXd Ht = H_.transpose();
   MatrixXd S = H_*P_*Ht + R_;
-
   MatrixXd Si = S.inverse();
+  MatrixXd K =  P_*Ht*Si;
 
-  // Calculate Kalman gain
-  MatrixXd K = P_*Ht*Si;
-  
-  // Calculate new state and covariance matrix
-  x_ = x_ + K*y;
-  P_ = (I - K*H_) *P_;
-
-  std::cout<<"Measurement Update for Lidar executed!!!"<<std::endl;
-
+  // New state
+  x_ = x_ + (K * y);
+  P_ = (I_ - (K * H_))*P_;
 }
 
-void KalmanFilter::UpdateEKF(const VectorXd &z) {
-  /**
-   * TODO: update the state by using Extended Kalman Filter equations
-   */
-  
-  // update the state by using Extended Kalman Filter equations
-  float pos_x = x_[0];
-  float pos_y = x_[1];
-  float vel_x = x_[2];
-  float vel_y = x_[3];
+// Extended Kalman Filter used for Radar measurements
+void KalmanFilter::UpdateEKF(const VectorXd &z) 
+{
+  float px, py, vx, vy;
+  px = x_[0];
+  py = x_[1];
+  vx = x_[2];
+  vy = x_[3];
 
-  // If rho == 0, avoid division by zero.
-
-  if(pos_x == 0. && pos_y == 0.)
+  // If rho == 0, skip the update step to avoid dividing by zero.
+  // This is crude but should be fairly robust on our data set.
+  if(px == 0. && py == 0.)
     return;
 
-  Tools tools;
+  Hj_ = tools.CalculateJacobian(x_);
 
-  MatrixXd Hj = tools.CalculateJacobian(x_);
+  // for radar measurement, we have h(x)
+  VectorXd hofx(3);
 
-  // vector h(x') definition
-  VectorXd hof_x(3);
+  float rho = sqrt(px*px + py*py);
+  float theta = atan2(py, px);
+  float rho_dot = (px*vx+py*vy)/rho;
 
-  float rho = sqrt(pos_x*pos_x + pos_y*pos_y);
-  float angle = atan2(pos_y, pos_x);
-  float rho_dot = (pos_x*vel_x + pos_y*vel_y)/rho;
+  hofx << rho, theta, rho_dot;
 
-  // this is h(x') vector
-  hof_x << rho, angle, rho_dot;
+  // Update the state using xtended Kalman Filter equations
+  VectorXd y = z - hofx;
 
-  // Update the state using Extended Kalman Filter equations
-  VectorXd y = z - hof_x;
+  if(y[1] > PI)
+    y[1] -= 2.f * PI;
+  if(y[1] < -PI)
+    y[1] += 2.f * PI;
 
-  // if the angle exceeds +180 or -180 degrees, add +/- 2PI
-  if(y[1] > M_PI)
-    y[1] -= 2.f*M_PI;
-  if(y[1] < -M_PI)
-    y[1] += 2.f*M_PI;
-
-  // Calculations
-  MatrixXd Hjt = Hj.transpose();
-  MatrixXd S = Hj*P_*Hjt + R_;
+  MatrixXd Hjt = Hj_.transpose();
+  MatrixXd S = (Hj_* P_ * Hjt) + R_ekf_;
   MatrixXd Si = S.inverse();
-  
-  // Calculate Kalman Gain
-  MatrixXd K = P_*Hjt*Si;
+  MatrixXd K = P_ * Hjt * Si;
 
   // Compute new state
-  x_ = x_ + (K*y);
-  P_ = (I - K*Hj)*P_;
-
-  std::cout<<"Measurement Update EKF for Radar executed!!!"<<std::endl;
-
+  x_ = x_ + (K * y);
+  P_ = (I_ - (K * Hj_)) * P_;
 }
